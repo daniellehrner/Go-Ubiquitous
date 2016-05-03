@@ -21,21 +21,26 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
 import java.lang.ref.WeakReference;
+import java.util.Calendar;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +49,12 @@ import java.util.concurrent.TimeUnit;
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
 public class SunshineWatchFace extends CanvasWatchFaceService {
+    private enum WeatherCondition {
+        CLEAR, CLOUDY, FOG, LIGHT_CLOUDS, LIGHT_RAIN, RAIN, SNOW, STORM;
+    }
+
+    private static final String LOG_TAG = "SunshineWatchFace";
+
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
 
@@ -100,6 +111,26 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         float mXOffset;
         float mYOffset;
 
+        Bitmap mClearBitmap, mCloudyBitmap, mFogBitmap, mLightCloudsBitmap,
+               mLightRainBitmap, mRainBitmap, mSnowBitmap, mStormBitmap;
+
+        private WeatherCondition mWeatherCondition = WeatherCondition.CLEAR;
+
+        private Bitmap getWeatherBitmap(WeatherCondition w) throws AssertionError {
+            switch (w) {
+                case CLEAR: return mClearBitmap;
+                case CLOUDY: return mCloudyBitmap;
+                case FOG: return mFogBitmap;
+                case LIGHT_CLOUDS: return mLightCloudsBitmap;
+                case LIGHT_RAIN: return mLightRainBitmap;
+                case RAIN: return mRainBitmap;
+                case SNOW: return mSnowBitmap;
+                case STORM: return mStormBitmap;
+                default: throw new AssertionError("Unknown weather condition: " + w);
+            }
+        }
+
+
         /**
          * Whether the display supports fewer bits for each color in ambient mode. When true, we
          * disable anti-aliasing in ambient mode.
@@ -125,6 +156,36 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
 
             mTime = new Time();
+
+            try {
+                Drawable drawable = resources.getDrawable(R.drawable.ic_clear, null);
+                mClearBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_cloudy, null);
+                mCloudyBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_fog, null);
+                mFogBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_light_clouds, null);
+                mLightCloudsBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_light_rain, null);
+                mLightRainBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_rain, null);
+                mRainBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_snow, null);
+                mSnowBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+                drawable = resources.getDrawable(R.drawable.ic_storm, null);
+                mStormBitmap = ((BitmapDrawable) drawable).getBitmap();
+            }
+            catch (NullPointerException e) {
+                Log.e(LOG_TAG, "Bitmap creation failed: " + e.toString());
+            }
+
         }
 
         @Override
@@ -227,6 +288,14 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 canvas.drawColor(Color.BLACK);
             } else {
                 canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
+
+                canvas.drawBitmap(getWeatherBitmap(mWeatherCondition),
+                        mXOffset,
+                        mYOffset + 20,
+                        mBackgroundPaint);
+
+                canvas.drawText("18°", mXOffset + 100, mYOffset + 70, mTextPaint);
+                canvas.drawText("6°", mXOffset + 100, mYOffset + 120, mTextPaint);
             }
 
             // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
@@ -235,6 +304,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     ? String.format("%d:%02d", mTime.hour, mTime.minute)
                     : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
             canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
+
+
         }
 
         /**
