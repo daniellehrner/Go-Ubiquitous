@@ -39,8 +39,17 @@ import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
+
 import java.lang.ref.WeakReference;
-import java.util.Calendar;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -49,10 +58,6 @@ import java.util.concurrent.TimeUnit;
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
 public class SunshineWatchFace extends CanvasWatchFaceService {
-    private enum WeatherCondition {
-        CLEAR, CLOUDY, FOG, LIGHT_CLOUDS, LIGHT_RAIN, RAIN, SNOW, STORM;
-    }
-
     private static final String LOG_TAG = "SunshineWatchFace";
 
     private static final Typeface NORMAL_TYPEFACE =
@@ -94,11 +99,19 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
+    @SuppressWarnings("ConstantConditions")
+    private class Engine extends CanvasWatchFaceService.Engine implements
+            DataApi.DataListener,
+            GoogleApiClient.ConnectionCallbacks,
+            GoogleApiClient.OnConnectionFailedListener {
+
+        private GoogleApiClient mGoogleApiClient;
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
         Paint mTextPaint;
+        Paint mTemperaturePaintHigh;
+        Paint mTemperaturePaintLow;
         boolean mAmbient;
         Time mTime;
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
@@ -111,23 +124,42 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         float mXOffset;
         float mYOffset;
 
+        int mTempHigh = 0;
+        int mTempLow = 0;
+        int mWeatherId = 0;
+
         Bitmap mClearBitmap, mCloudyBitmap, mFogBitmap, mLightCloudsBitmap,
                mLightRainBitmap, mRainBitmap, mSnowBitmap, mStormBitmap;
 
-        private WeatherCondition mWeatherCondition = WeatherCondition.CLEAR;
-
-        private Bitmap getWeatherBitmap(WeatherCondition w) throws AssertionError {
-            switch (w) {
-                case CLEAR: return mClearBitmap;
-                case CLOUDY: return mCloudyBitmap;
-                case FOG: return mFogBitmap;
-                case LIGHT_CLOUDS: return mLightCloudsBitmap;
-                case LIGHT_RAIN: return mLightRainBitmap;
-                case RAIN: return mRainBitmap;
-                case SNOW: return mSnowBitmap;
-                case STORM: return mStormBitmap;
-                default: throw new AssertionError("Unknown weather condition: " + w);
+        private Bitmap getWeatherBitmap(int weatherId) throws AssertionError {
+            if (weatherId >= 200 && weatherId <= 232) {
+                return mStormBitmap;
+            } else if (weatherId >= 300 && weatherId <= 321) {
+                return mLightRainBitmap;
+            } else if (weatherId >= 500 && weatherId <= 504) {
+                return mRainBitmap;
+            } else if (weatherId == 511) {
+                return mSnowBitmap;
+            } else if (weatherId >= 520 && weatherId <= 531) {
+                return mRainBitmap;
+            } else if (weatherId >= 600 && weatherId <= 622) {
+                return mSnowBitmap;
+            } else if (weatherId >= 701 && weatherId <= 761) {
+                return mFogBitmap;
+            } else if (weatherId == 761 || weatherId == 781) {
+                return mStormBitmap;
+            } else if (weatherId == 800) {
+                return mClearBitmap;
+            } else if (weatherId == 801) {
+                return mLightCloudsBitmap;
+            } else if (weatherId >= 802 && weatherId <= 804) {
+                return mCloudyBitmap;
             }
+            else if (weatherId == 0) {
+                return null;
+            }
+
+            throw new AssertionError("Unknown weatherId: " + weatherId);
         }
 
 
@@ -155,36 +187,43 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             mTextPaint = new Paint();
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
 
+            mTemperaturePaintHigh = new Paint();
+            mTemperaturePaintHigh = createTextPaint(resources.getColor(R.color.temperature_high_text));
+
+            mTemperaturePaintLow = new Paint();
+            mTemperaturePaintLow = createTextPaint(resources.getColor(R.color.temperature_low_text));
+
             mTime = new Time();
 
-            try {
-                Drawable drawable = resources.getDrawable(R.drawable.ic_clear, null);
-                mClearBitmap = ((BitmapDrawable) drawable).getBitmap();
+            Drawable drawable = resources.getDrawable(R.drawable.ic_clear, null);
+            mClearBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_cloudy, null);
-                mCloudyBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_cloudy, null);
+            mCloudyBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_fog, null);
-                mFogBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_fog, null);
+            mFogBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_light_clouds, null);
-                mLightCloudsBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_light_clouds, null);
+            mLightCloudsBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_light_rain, null);
-                mLightRainBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_light_rain, null);
+            mLightRainBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_rain, null);
-                mRainBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_rain, null);
+            mRainBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_snow, null);
-                mSnowBitmap = ((BitmapDrawable) drawable).getBitmap();
+            drawable = resources.getDrawable(R.drawable.ic_snow, null);
+            mSnowBitmap = ((BitmapDrawable) drawable).getBitmap();
 
-                drawable = resources.getDrawable(R.drawable.ic_storm, null);
-                mStormBitmap = ((BitmapDrawable) drawable).getBitmap();
-            }
-            catch (NullPointerException e) {
-                Log.e(LOG_TAG, "Bitmap creation failed: " + e.toString());
-            }
+            drawable = resources.getDrawable(R.drawable.ic_storm, null);
+            mStormBitmap = ((BitmapDrawable) drawable).getBitmap();
+
+            mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
+                    .addApi(Wearable.API)
+                    .addConnectionCallbacks(this)
+                    .addOnConnectionFailedListener(this)
+                    .build();
 
         }
 
@@ -207,6 +246,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             super.onVisibilityChanged(visible);
 
             if (visible) {
+                mGoogleApiClient.connect();
+
                 registerReceiver();
 
                 // Update time zone in case it changed while we weren't visible.
@@ -214,6 +255,11 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 mTime.setToNow();
             } else {
                 unregisterReceiver();
+
+                if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+                    Wearable.DataApi.removeListener(mGoogleApiClient, this);
+                    mGoogleApiClient.disconnect();
+                }
             }
 
             // Whether the timer should be running depends on whether we're visible (as well as
@@ -251,6 +297,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
 
             mTextPaint.setTextSize(textSize);
+
+            mTemperaturePaintHigh.setTextSize(textSize * (float) 0.7);
+            mTemperaturePaintLow.setTextSize(textSize * (float) 0.7);
         }
 
         @Override
@@ -283,19 +332,17 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
+            int width = bounds.width();
+            int height = bounds.height();
+
+            int centerX = width / 2;
+            int centerY = height / 2;
+
             // Draw the background.
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
             } else {
-                canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
-
-                canvas.drawBitmap(getWeatherBitmap(mWeatherCondition),
-                        mXOffset,
-                        mYOffset + 20,
-                        mBackgroundPaint);
-
-                canvas.drawText("18°", mXOffset + 100, mYOffset + 70, mTextPaint);
-                canvas.drawText("6°", mXOffset + 100, mYOffset + 120, mTextPaint);
+                canvas.drawRect(0, 0, width, height, mBackgroundPaint);
             }
 
             // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
@@ -305,7 +352,19 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
             canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
 
+            if (!isInAmbientMode() && getPeekCardPosition().isEmpty()) {
+                Bitmap currentWeather = getWeatherBitmap(mWeatherId);
 
+                if (currentWeather != null) {
+                    canvas.drawBitmap(currentWeather,
+                            centerX - 10 - currentWeather.getScaledWidth(canvas),
+                            mYOffset + 30,
+                            mBackgroundPaint);
+
+                    canvas.drawText(mTempHigh + "°", centerX + 20, mYOffset + 70, mTemperaturePaintHigh);
+                    canvas.drawText(mTempLow + "°", centerX + 20, mYOffset + 120, mTemperaturePaintLow);
+                }
+            }
         }
 
         /**
@@ -338,6 +397,51 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                         - (timeMs % INTERACTIVE_UPDATE_RATE_MS);
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
             }
+        }
+
+        @Override // DataApi.DataListener
+        public void onDataChanged(DataEventBuffer dataEvents) {
+            Log.d(LOG_TAG, "onDataChanged: " + dataEvents);
+
+            for (DataEvent dataEvent : dataEvents) {
+                if (dataEvent.getType() != DataEvent.TYPE_CHANGED) {
+                    continue;
+                }
+
+                DataItem dataItem = dataEvent.getDataItem();
+                if (!dataItem.getUri().getPath().equals(
+                        SunshineWatchFaceUtil.PATH_WITH_FEATURE)) {
+                    continue;
+                }
+
+                DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
+                DataMap weatherUpdate = dataMapItem.getDataMap();
+                Log.d(LOG_TAG, "Weather DataItem updated:" + weatherUpdate);
+                updateUiOnUpdate(weatherUpdate);
+            }
+        }
+
+        private void updateUiOnUpdate(DataMap weatherUpdate) {
+            mWeatherId = weatherUpdate.getInt("weatherId");
+            mTempHigh = weatherUpdate.getInt("high");
+            mTempLow = weatherUpdate.getInt("low");
+        }
+
+        @Override  // GoogleApiClient.ConnectionCallbacks
+        public void onConnected(Bundle connectionHint) {
+            Log.d(LOG_TAG, "onConnected: " + connectionHint);
+            Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
+//            updateConfigDataItemAndUiOnStartup();
+        }
+
+        @Override  // GoogleApiClient.ConnectionCallbacks
+        public void onConnectionSuspended(int cause) {
+            Log.d(LOG_TAG, "onConnectionSuspended: " + cause);
+        }
+
+        @Override  // GoogleApiClient.OnConnectionFailedListener
+        public void onConnectionFailed(ConnectionResult result) {
+            Log.d(LOG_TAG, "onConnectionFailed: " + result);
         }
     }
 }

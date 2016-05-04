@@ -34,6 +34,7 @@ import com.example.android.sunshine.app.BuildConfig;
 import com.example.android.sunshine.app.MainActivity;
 import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
+import com.example.android.sunshine.app.WatchfaceSync;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
 
@@ -86,6 +87,8 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public static final int LOCATION_STATUS_SERVER_INVALID = 2;
     public static final int LOCATION_STATUS_UNKNOWN = 3;
     public static final int LOCATION_STATUS_INVALID = 4;
+
+    private static WatchfaceSync mWatchFaceSync = null;
 
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
@@ -330,6 +333,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 weatherValues.put(WeatherContract.WeatherEntry.COLUMN_WEATHER_ID, weatherId);
 
                 cVVector.add(weatherValues);
+
+                // watch face only shows today's weather
+                if (i == 0 && mWatchFaceSync != null) {
+                    mWatchFaceSync.updateWatchFace(weatherId, (int) Math.round(high), (int) Math.round(low));
+                }
             }
 
             int inserted = 0;
@@ -622,6 +630,10 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
 
     public static void initializeSyncAdapter(Context context) {
         getSyncAccount(context);
+    }
+
+    public static void setWatchFaceSync(WatchfaceSync watchFaceSync) {
+        mWatchFaceSync = watchFaceSync;
     }
 
     /**
