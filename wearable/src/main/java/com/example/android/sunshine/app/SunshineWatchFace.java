@@ -112,6 +112,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         Paint mTextPaint;
         Paint mTemperaturePaintHigh;
         Paint mTemperaturePaintLow;
+        Paint mOpenAppPaint;
         boolean mAmbient;
         Time mTime;
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
@@ -127,6 +128,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         int mTempHigh = 0;
         int mTempLow = 0;
         int mWeatherId = 0;
+
+        boolean mIsRound;
 
         Bitmap mClearBitmap, mCloudyBitmap, mFogBitmap, mLightCloudsBitmap,
                mLightRainBitmap, mRainBitmap, mSnowBitmap, mStormBitmap;
@@ -192,6 +195,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             mTemperaturePaintLow = new Paint();
             mTemperaturePaintLow = createTextPaint(resources.getColor(R.color.temperature_low_text));
+
+            mOpenAppPaint = new Paint();
+            mOpenAppPaint = createTextPaint(resources.getColor(R.color.temperature_high_text));
 
             mTime = new Time();
 
@@ -290,16 +296,17 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             // Load resources that have alternate values for round watches.
             Resources resources = SunshineWatchFace.this.getResources();
-            boolean isRound = insets.isRound();
-            mXOffset = resources.getDimension(isRound
+            mIsRound = insets.isRound();
+            mXOffset = resources.getDimension(mIsRound
                     ? R.dimen.digital_x_offset_round : R.dimen.digital_x_offset);
-            float textSize = resources.getDimension(isRound
+            float textSize = resources.getDimension(mIsRound
                     ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
 
             mTextPaint.setTextSize(textSize);
 
             mTemperaturePaintHigh.setTextSize(textSize * (float) 0.7);
             mTemperaturePaintLow.setTextSize(textSize * (float) 0.7);
+            mOpenAppPaint.setTextSize(textSize * (float) 0.4);
         }
 
         @Override
@@ -363,6 +370,31 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
                     canvas.drawText(mTempHigh + "°", centerX + 20, mYOffset + 70, mTemperaturePaintHigh);
                     canvas.drawText(mTempLow + "°", centerX + 20, mYOffset + 120, mTemperaturePaintLow);
+                }
+                else {
+                    int startX = 0;
+
+                    if (mIsRound) {
+                        startX = 40;
+                    }
+                    else {
+                        startX = 20;
+                    }
+
+                    canvas.drawText(getString(R.string.connect_phone_1),
+                            startX,
+                            centerY + 40,
+                            mOpenAppPaint);
+
+                    canvas.drawText(getString(R.string.connect_phone_2),
+                            startX,
+                            centerY + 70,
+                            mOpenAppPaint);
+
+                    canvas.drawText(getString(R.string.connect_phone_3),
+                            startX,
+                            centerY + 100,
+                            mOpenAppPaint);
                 }
             }
         }

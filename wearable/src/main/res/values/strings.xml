@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Sunshine</string>
     <string name="sunshine_digital">A Sunshine Digital</string>
+    <string name="connect_phone_1">Please open the app</string>
+    <string name="connect_phone_2">on your phone to get</string>
+    <string name="connect_phone_3">weather updates</string>
 </resources>
