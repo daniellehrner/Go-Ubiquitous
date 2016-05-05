@@ -2,14 +2,6 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.google.gms.google-services'
 
 android {
-    signingConfigs {
-        config {
-            keyAlias 'sunshine'
-            keyPassword 'sunshine'
-            storeFile file('/home/daniel/key_store_sunshine.jks')
-            storePassword 'sunshine'
-        }
-    }
     compileSdkVersion 23
     buildToolsVersion "23.0.3"
     defaultConfig {
@@ -23,7 +15,6 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.config
         }
     }
     buildTypes.each {

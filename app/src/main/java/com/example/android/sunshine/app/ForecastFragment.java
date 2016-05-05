@@ -115,8 +115,6 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         super.onCreate(savedInstanceState);
         // Add this line in order for this fragment to handle menu events.
         setHasOptionsMenu(true);
-
-        SunshineSyncAdapter.syncImmediately(getContext());
     }
 
     @Override
@@ -124,6 +122,7 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
         sp.registerOnSharedPreferenceChangeListener(this);
         super.onResume();
+        SunshineSyncAdapter.syncImmediately(getContext());
     }
 
     @Override
